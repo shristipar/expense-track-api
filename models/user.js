@@ -15,6 +15,9 @@ const userSchema = mongoose.Schema({
 });
 
 mongoose.Promise = global.Promise;
-mongoose.connect(config.mongodbConnect);
+mongoose.connection.on('error', function (err) {
+    console.error('MongoDB connection error:', err.message);
+});
+mongoose.connect(process.env.MONGODB_URI || config.mongodbConnect);
 
 module.exports = mongoose.model('user', userSchema);

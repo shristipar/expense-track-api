@@ -1,10 +1,11 @@
 var express = require('express');
 var path = require('path');
+var fs = require('fs');
 var favicon = require('serve-favicon');
 var logger = require('morgan');
 var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
-var sassMiddleware = require('node-sass-middleware');
+var sass = require('sass');
 
 var index = require('./routes/index');
 var user = require('./routes/user');
@@ -23,12 +24,20 @@ app.use(bodyParser.urlencoded({
     extended: false
 }));
 app.use(cookieParser());
-app.use(sassMiddleware({
-    src: path.join(__dirname, 'public'),
-    dest: path.join(__dirname, 'public'),
-    indentedSyntax: true, // true = .sass and false = .scss
-    sourceMap: true
-}));
+app.use(function sassCompile(req, res, next) {
+    if (req.method !== 'GET') return next();
+    var cssMatch = req.path.match(/^(.+)\.css$/i);
+    if (!cssMatch) return next();
+    var sassPath = path.join(__dirname, 'public', cssMatch[1] + '.sass');
+    if (!fs.existsSync(sassPath)) return next();
+    try {
+        var out = sass.compile(sassPath, { style: 'expanded', sourceMap: true });
+        res.type('text/css');
+        res.send(out.css);
+    } catch (err) {
+        next(err);
+    }
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/', index);
