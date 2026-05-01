@@ -9,6 +9,7 @@ var sass = require('sass');
 
 var index = require('./routes/index');
 var user = require('./routes/user');
+var receipt = require('./routes/receipt');
 
 var app = express();
 
@@ -41,6 +42,7 @@ app.use(function sassCompile(req, res, next) {
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/', index);
+app.use('/api/receipts', receipt);
 app.use('/user', user);
 
 // catch 404 and forward to error handler

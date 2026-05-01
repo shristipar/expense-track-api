@@ -1,6 +1,6 @@
 # SnappBill backend
 
-Express API for user registration, authentication (JWT), activation email flow, and password reset. Uses MongoDB via Mongoose and optional in-memory Mongo for local development.
+Express API for user registration, authentication (JWT), activation email flow, and password reset. Includes a **receipt-reading agent** that turns receipt images into a structured **expense** JSON model (via OpenAI vision). Uses MongoDB via Mongoose and optional in-memory Mongo for local development.
 
 ## Requirements
 
@@ -101,13 +101,50 @@ The home page is served at **`GET /`** (Jade view).
 
 > **Note:** `routes/bill.js` exists in the repo but is **not** mounted in `app.js` yet, so bill endpoints are not active until you wire them in.
 
+## Receipt agent (expense from images)
+
+The agent lives under **`services/receipt-agent.js`** and normalizes output with **`lib/expense-model.js`**.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/api/receipts/parse` | Multipart upload: field **`image`** (JPEG/PNG/WebP, max ~12MB). Returns `{ expense }`. |
+
+**Expense model** (JSON): `merchant`, `total`, `currency`, `transactionDate`, `subtotal`, `taxTotal`, `category`, `lineItems[]`, `paymentMethod`, `notes` (see `lib/expense-model.js`).
+
+**Environment**
+
+| Variable | Purpose |
+| --- | --- |
+| `OPENAI_API_KEY` | Required for real parsing (except mock mode). |
+| `OPENAI_RECEIPT_MODEL` | Optional override (default `gpt-4o-mini`). |
+| `RECEIPT_AGENT_MOCK=1` | Returns a fixed sample expense without calling OpenAI (for local tests). |
+
+Example (real parsing):
+
+```bash
+export OPENAI_API_KEY='sk-...'
+curl -s -X POST http://localhost:3000/api/receipts/parse \
+  -F "image=@/path/to/receipt.jpg" | jq .
+```
+
+Example (mock, no API key):
+
+```bash
+RECEIPT_AGENT_MOCK=1 npm start
+# then POST /api/receipts/parse with any small image or omit file — handler returns mock before multer when mock=1
+```
+
+With `RECEIPT_AGENT_MOCK=1`, the handler returns the mock response **without** requiring an upload.
+
 ## Project layout
 
 | Path | Role |
 | --- | --- |
 | `bin/www` | HTTP server entry; optional in-memory Mongo bootstrap. |
 | `app.js` | Express app, middleware, routes. |
-| `routes/` | Route modules (`/`, `/user`). |
+| `routes/` | Route modules (`/`, `/user`, `/api/receipts`). |
+| `services/` | Receipt vision agent (`receipt-agent.js`). |
+| `lib/` | Shared helpers (`expense-model.js`). |
 | `controllers/` | Business logic, JWT helpers, mailer. |
 | `models/` | Mongoose models. |
 | `views/` | Jade templates. |
