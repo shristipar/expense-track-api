@@ -1,6 +1,6 @@
 'use strict';
 
-const config = require('../config');
+const config = require('../lib/app-config');
 const mongoose = require('mongoose');
 //const Schema = mongoose.Schema;
 

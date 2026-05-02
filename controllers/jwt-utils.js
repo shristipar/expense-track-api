@@ -1,4 +1,4 @@
-const config = require('../config');
+const config = require('../lib/app-config');
 const jwt = require('jsonwebtoken');
 
 var controller = {

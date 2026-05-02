@@ -15,7 +15,7 @@ cd expense-track-api
 npm install
 ```
 
-Create a **`config.js`** file in the project root (this file is gitignored). The app expects something like:
+Create a **`config.js`** file in the project root (this file is gitignored) with the shape below. If `config.js` is missing and **`NODE_ENV` is `test`**, the app loads **`test/fixtures/config.js`** instead (used by `npm test`).
 
 ```javascript
 module.exports = {
@@ -144,9 +144,10 @@ With `RECEIPT_AGENT_MOCK=1`, the handler returns the mock response **without** r
 | `app.js` | Express app, middleware, routes. |
 | `routes/` | Route modules (`/`, `/user`, `/api/receipts`). |
 | `services/` | Receipt vision agent (`receipt-agent.js`). |
-| `lib/` | Shared helpers (`expense-model.js`). |
+| `lib/` | Shared helpers (`expense-model.js`, `app-config.js`). |
 | `controllers/` | Business logic, JWT helpers, mailer. |
 | `models/` | Mongoose models. |
+| `test/` | Integration tests and test-only config. |
 | `views/` | Jade templates. |
 | `public/` | Static assets; `.sass` compiled on the fly with `sass`. |
 
@@ -155,6 +156,19 @@ With `RECEIPT_AGENT_MOCK=1`, the handler returns the mock response **without** r
 | Command | Description |
 | --- | --- |
 | `npm start` | Run `node ./bin/www`. |
+| `npm test` | Integration tests for all mounted routes (see below). |
+
+## Testing
+
+```bash
+npm test
+```
+
+This runs **`test/endpoints.test.js`** with **`supertest`**: `GET /`, every **`/user/*`** route from `routes/user.js`, and **`POST /api/receipts/parse`** (receipt agent in mock mode, no OpenAI key).
+
+- **Config:** `lib/app-config.js` loads root `config.js` if present; otherwise, when `NODE_ENV=test`, it loads **`test/fixtures/config.js`**.
+- **MongoDB:** Tests use **mongodb-memory-server** pinned to **MongoDB 5.0.29** so Mongoose 4’s legacy wire protocol still works (newer Mongo versions reject it).
+- **Email:** With `NODE_ENV=test`, the mailer skips SMTP and records activation and reset tokens on **`global.__testActivationTokenByEmail`** and **`global.__testResetTokenByEmail`** so flows can be exercised without a mailbox.
 
 ## Security and maintenance
 

@@ -60,7 +60,9 @@ async function ensureMongoUri() {
         return;
     }
     var { MongoMemoryServer } = require('mongodb-memory-server');
-    var mongod = await MongoMemoryServer.create();
+    var mongod = await MongoMemoryServer.create({
+        binary: { version: '5.0.29' },
+    });
     process.env.MONGODB_URI = mongod.getUri();
     console.log('Started in-memory MongoDB (set MONGODB_URI to use your own server)');
 }

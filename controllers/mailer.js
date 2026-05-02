@@ -1,8 +1,13 @@
 const nodemailer = require('nodemailer');
-const config = require('../config');
+const config = require('../lib/app-config');
 
 var controller = {
     sendResetPasswordMail: (random, user) => {
+        if (process.env.NODE_ENV === 'test') {
+            global.__testResetTokenByEmail = global.__testResetTokenByEmail || {};
+            global.__testResetTokenByEmail[user.email] = random;
+            return Promise.resolve({ messageId: 'test-skip-mail' });
+        }
         const transporter = nodemailer.createTransport({
             service: 'Gmail',
             auth: {
@@ -29,6 +34,11 @@ var controller = {
         return transporter.sendMail(mailOptions);
     },
     sendActivationMail: (random, user) => {
+        if (process.env.NODE_ENV === 'test') {
+            global.__testActivationTokenByEmail = global.__testActivationTokenByEmail || {};
+            global.__testActivationTokenByEmail[user.email] = random;
+            return Promise.resolve({ messageId: 'test-skip-mail' });
+        }
         const transporter = nodemailer.createTransport({
             service: 'Gmail',
             auth: {

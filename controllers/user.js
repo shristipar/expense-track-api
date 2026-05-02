@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 var emailValidator = require("email-validator");
 
-const config = require('../config');
+const config = require('../lib/app-config');
 
 const randomstring = require("randomstring");
 

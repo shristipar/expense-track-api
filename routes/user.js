@@ -1,4 +1,4 @@
-const config = require('../config');
+const config = require('../lib/app-config');
 var express = require('express');
 var router = express.Router();
 const auth = require('basic-auth');
@@ -75,7 +75,7 @@ router.get('/get/:id', jwtUtils.checkToken, (req, res) => {
         });
 });
 router.post('/pass/change/:id', (req, res) => {
-    if (jwtUtils.checkToken(req)) {
+    if (jwtUtils.validToken(req)) {
         const oldPassword = req.body.password;
         const newPassword = req.body.newPassword;
         if (!oldPassword || !newPassword || !oldPassword.trim() || !newPassword.trim()) {
