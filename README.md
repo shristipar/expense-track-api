@@ -164,6 +164,8 @@ With `RECEIPT_AGENT_MOCK=1`, the handler returns the mock response **without** r
 npm test
 ```
 
+On **push** or **pull request** to `master` or `main`, [GitHub Actions](.github/workflows/ci.yml) runs `npm ci` and `npm test` on Node.js 20 and 22.
+
 This runs **`test/endpoints.test.js`** with **`supertest`**: `GET /`, every **`/user/*`** route from `routes/user.js`, and **`POST /api/receipts/parse`** (receipt agent in mock mode, no OpenAI key).
 
 - **Config:** `lib/app-config.js` loads root `config.js` if present; otherwise, when `NODE_ENV=test`, it loads **`test/fixtures/config.js`**.
