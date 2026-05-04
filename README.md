@@ -1,11 +1,12 @@
 # SnappBill backend
 
-Express API for user registration, authentication (JWT), activation email flow, and password reset. Includes a **receipt-reading agent** that turns receipt images into a structured **expense** JSON model (via OpenAI vision). Uses MongoDB via Mongoose and optional in-memory Mongo for local development.
+Express API for user registration, authentication (JWT), activation email flow, and password reset. Includes a **receipt-reading agent** that turns receipt images into a structured **expense** JSON model (via OpenAI vision). Persists users in **PostgreSQL** via the **`pg`** driver, with an optional **embedded in-memory Postgres ([PGlite](https://pglite.dev))** when no database URL is configured (non-production).
 
 ## Requirements
 
 - **Node.js** 18+ recommended (LTS such as v20 or v24 is fine).
 - **npm** (comes with Node).
+- **PostgreSQL** is optional for local development: if you omit `DATABASE_URL` and `config.databaseUrl`, the app uses **PGlite** in memory. Use a real server (Docker, install, or hosted) when you want persisted data or in **production**.
 
 ## Setup
 
@@ -15,11 +16,19 @@ cd expense-track-api
 npm install
 ```
 
-Create a **`config.js`** file in the project root (this file is gitignored) with the shape below. If `config.js` is missing and **`NODE_ENV` is `test`**, the app loads **`test/fixtures/config.js`** instead (used by `npm test`).
+Start a real Postgres locally when you want data to survive restarts (optional):
+
+```bash
+docker compose up -d
+```
+
+This uses **`docker-compose.yml`** (user `postgres` / password `postgres`, database `snappbill` on port **5432**). Point the app at it with `DATABASE_URL` or `databaseUrl` in **`config.js`**.
+
+Create a **`config.js`** file in the project root (this file is gitignored). You can copy from **`config.example.js`**. If `config.js` is missing and **`NODE_ENV` is `test`**, the app loads **`test/fixtures/config.js`** (used by `npm test`).
 
 ```javascript
 module.exports = {
-  mongodbConnect: 'mongodb://127.0.0.1:27017/snappbill',
+  databaseUrl: 'postgresql://postgres:postgres@127.0.0.1:5432/snappbill',
   secret: 'your-jwt-secret',
   jwtExpire: '24h',
   baseURL: 'http://localhost:3000',
@@ -37,7 +46,7 @@ module.exports = {
 
 | Field | Purpose |
 | --- | --- |
-| `mongodbConnect` | Default MongoDB URI when `MONGODB_URI` is not set (see below). |
+| `databaseUrl` | PostgreSQL connection string when `DATABASE_URL` is unset. Omit both to use **PGlite** in memory (development/test only). |
 | `secret` | JWT signing secret. |
 | `jwtExpire` | JWT expiry (e.g. `24h`, `7d`). |
 | `baseURL` | Public base URL for links in activation and password-reset emails. |
@@ -51,24 +60,31 @@ module.exports = {
 npm start
 ```
 
-The server listens on **`PORT`** or **3000** by default.
+On startup, **`bin/www`** runs **`db/migrate.js`** against **`db/schema.sql`** (creates the `users` table if needed), then listens on **`PORT`** or **3000**.
 
-### MongoDB
+### PostgreSQL connection
 
-- **`MONGODB_URI`** (optional): If set, the app connects to this URI and skips the in-memory server.
-- **Local / default**: If `MONGODB_URI` is **not** set and **`NODE_ENV` is not `production`**, the app starts an **in-memory MongoDB** ([mongodb-memory-server](https://github.com/nodkz/mongodb-memory-server)) so you can run without installing MongoDB. Data is not persisted after exit.
-- **Production**: Set `NODE_ENV=production` and either set **`MONGODB_URI`** or rely on **`mongodbConnect`** in `config.js`. You must run a real MongoDB instance and point the URI at it.
+- **`DATABASE_URL`** (optional): If set, it overrides `config.databaseUrl`.
+- **`config.databaseUrl`**: Used when `DATABASE_URL` is not set.
+- **In-memory (default for dev/test):** If **both** are unset and **`NODE_ENV` is not `production`**, **`lib/db.js`** starts **[PGlite](https://pglite.dev)** (`@electric-sql/pglite`) — a WASM Postgres inside the Node process. Data is **not** persisted after exit. You will see: `Using in-memory PostgreSQL (PGlite)...`
+- **Production:** You **must** set `DATABASE_URL` or `config.databaseUrl`; PGlite is not used.
+
+`bin/www` calls **`await initPool()`** before migrations and loading the app.
 
 Examples:
 
 ```bash
-# Use your own MongoDB
-export MONGODB_URI='mongodb://127.0.0.1:27017/snappbill'
+# Real Postgres (e.g. after docker compose up -d)
+export DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/snappbill'
 npm start
 ```
 
 ```bash
-# Different HTTP port
+# In-memory PGlite: omit DATABASE_URL and databaseUrl (and do not set NODE_ENV=production)
+npm start
+```
+
+```bash
 PORT=4000 npm start
 ```
 
@@ -131,7 +147,7 @@ Example (mock, no API key):
 
 ```bash
 RECEIPT_AGENT_MOCK=1 npm start
-# then POST /api/receipts/parse with any small image or omit file — handler returns mock before multer when mock=1
+# then POST /api/receipts/parse — handler returns mock before multer when mock=1
 ```
 
 With `RECEIPT_AGENT_MOCK=1`, the handler returns the mock response **without** requiring an upload.
@@ -140,13 +156,14 @@ With `RECEIPT_AGENT_MOCK=1`, the handler returns the mock response **without** r
 
 | Path | Role |
 | --- | --- |
-| `bin/www` | HTTP server entry; optional in-memory Mongo bootstrap. |
+| `bin/www` | HTTP server entry; runs DB migrations then listens. |
 | `app.js` | Express app, middleware, routes. |
+| `db/` | SQL schema and migration runner. |
 | `routes/` | Route modules (`/`, `/user`, `/api/receipts`). |
 | `services/` | Receipt vision agent (`receipt-agent.js`). |
-| `lib/` | Shared helpers (`expense-model.js`, `app-config.js`). |
+| `lib/` | DB bootstrap (`db.js`: `pg` Pool or **PGlite**), `app-config.js`, `expense-model.js`. |
 | `controllers/` | Business logic, JWT helpers, mailer. |
-| `models/` | Mongoose models. |
+| `models/` | User persistence (`user.js` + `pg`). |
 | `test/` | Integration tests and test-only config. |
 | `views/` | Jade templates. |
 | `public/` | Static assets; `.sass` compiled on the fly with `sass`. |
@@ -164,14 +181,15 @@ With `RECEIPT_AGENT_MOCK=1`, the handler returns the mock response **without** r
 npm test
 ```
 
-On **push** or **pull request** to `master` or `main`, [GitHub Actions](.github/workflows/ci.yml) runs `npm ci` and `npm test` on Node.js 20 and 22.
+`test/endpoints.test.js` calls **`await initPool()`** first: with no `DATABASE_URL` / `databaseUrl`, tests use **PGlite** (no Docker Postgres required).
 
-This runs **`test/endpoints.test.js`** with **`supertest`**: `GET /`, every **`/user/*`** route from `routes/user.js`, and **`POST /api/receipts/parse`** (receipt agent in mock mode, no OpenAI key).
+On **push** or **pull request** to `master` or `main`, [GitHub Actions](.github/workflows/ci.yml) runs `npm ci` and **`npm test`** on Node.js 20 and 22 (PGlite in CI).
 
-- **Config:** `lib/app-config.js` loads root `config.js` if present; otherwise, when `NODE_ENV=test`, it loads **`test/fixtures/config.js`**.
-- **MongoDB:** Tests use **mongodb-memory-server** pinned to **MongoDB 5.0.29** so Mongoose 4’s legacy wire protocol still works (newer Mongo versions reject it).
-- **Email:** With `NODE_ENV=test`, the mailer skips SMTP and records activation and reset tokens on **`global.__testActivationTokenByEmail`** and **`global.__testResetTokenByEmail`** so flows can be exercised without a mailbox.
+`test/endpoints.test.js` uses **supertest** for `GET /`, **`/user/*`**, and **`POST /api/receipts/parse`** (receipt mock mode).
+
+- **Config:** `lib/app-config.js` loads root `config.js` if present; otherwise, when `NODE_ENV=test`, it loads **`test/fixtures/config.js`** (no `databaseUrl`, so PGlite is used unless you set **`DATABASE_URL`** for an external DB).
+- **Email:** With `NODE_ENV=test`, the mailer skips SMTP and records activation and reset tokens on **`global.__testActivationTokenByEmail`** and **`global.__testResetTokenByEmail`**.
 
 ## Security and maintenance
 
-This codebase uses older dependencies (Express 4.15, Mongoose 4, Jade, etc.). For production, plan upgrades, dependency audits (`npm audit`), strong secrets, TLS, and a managed MongoDB service.
+This codebase uses older dependencies in places (Express 4.15, Jade, etc.). For production, use strong secrets, TLS, dependency audits (`npm audit`), and a managed PostgreSQL service.
