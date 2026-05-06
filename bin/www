@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Boot: optional in-memory Mongo when MONGODB_URI is unset (non-production).
+ * Boot: run DB migrations, then start HTTP server.
  */
 
 var debug = require('debug')('snappbill-backend:server');
@@ -52,32 +52,21 @@ function onListening(server) {
     };
 }
 
-async function ensureMongoUri() {
-    if (process.env.MONGODB_URI) {
-        return;
-    }
-    if (process.env.NODE_ENV === 'production') {
-        return;
-    }
-    var { MongoMemoryServer } = require('mongodb-memory-server');
-    var mongod = await MongoMemoryServer.create({
-        binary: { version: '5.0.29' },
-    });
-    process.env.MONGODB_URI = mongod.getUri();
-    console.log('Started in-memory MongoDB (set MONGODB_URI to use your own server)');
+async function boot() {
+    var dbmod = require('../lib/db');
+    await dbmod.initPool();
+    var migrate = require('../db/migrate');
+    await migrate(dbmod.pool);
+    var app = require('../app');
+    var port = normalizePort(process.env.PORT || '3000');
+    app.set('port', port);
+    var server = http.createServer(app);
+    server.listen(port);
+    server.on('error', onError(port));
+    server.on('listening', onListening(server));
 }
 
-ensureMongoUri()
-    .then(function () {
-        var app = require('../app');
-        var port = normalizePort(process.env.PORT || '3000');
-        app.set('port', port);
-        var server = http.createServer(app);
-        server.listen(port);
-        server.on('error', onError(port));
-        server.on('listening', onListening(server));
-    })
-    .catch(function (err) {
-        console.error(err);
-        process.exit(1);
-    });
+boot().catch(function (err) {
+    console.error(err);
+    process.exit(1);
+});

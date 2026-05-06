@@ -19,7 +19,7 @@ router.post('/register', (req, res) => {
             res.status(result.status).json({
                 message: result.message
             });
-        }).catch(err => res.status(err.status).json({
+        }).catch(err => res.status(err.status || 500).json({
             message: err.message
         }));
     }
@@ -32,7 +32,7 @@ router.get('/activate/:id/:token', (req, res) => {
             message: result.message,
             token: jwtUtils.getToken(result)
         });
-    }).catch(err => res.status(err.status).json({
+    }).catch(err => res.status(err.status || 500).json({
         message: err.message
     }));
 });
@@ -49,7 +49,7 @@ router.post('/authenticate', (req, res) => {
                 message: result.message
                 , token: jwtUtils.getToken(result)
             });
-        }).catch(err => res.status(err.status).json({
+        }).catch(err => res.status(err.status || 500).json({
             message: err.message
         }));
     }
@@ -69,7 +69,7 @@ router.get('/get/:id', jwtUtils.checkToken, (req, res) => {
     user.get(req.params.id)
         .then(result => res.json(result))
         .catch(err => {
-            res.status(err.status).json({
+            res.status(err.status || 500).json({
                 message: err.message
             })
         });
@@ -86,7 +86,7 @@ router.post('/pass/change/:id', (req, res) => {
         else {
             user.changePassword(req.params.id, oldPassword, newPassword).then(result => res.status(result.status).json({
                 message: result.message
-            })).catch(err => res.status(err.status).json({
+            })).catch(err => res.status(err.status || 500).json({
                 message: err.message
             }));
         }
@@ -113,14 +113,14 @@ router.post('/pass/reset/:id', (req, res) => {
             res.status(result.status).json({
                 message: result.message
             })
-        }).catch(err => res.status(err.status).json({
+        }).catch(err => res.status(err.status || 500).json({
             message: err.message
         }));
     }
     else {
         user.resetPasswordFinish(email, token, newPassword).then(result => res.status(result.status).json({
             message: result.message
-        })).catch(err => res.status(err.status).json({
+        })).catch(err => res.status(err.status || 500).json({
             message: err.message
         }));
     }

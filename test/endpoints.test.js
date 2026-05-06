@@ -3,8 +3,6 @@
 var { describe, it, before, after } = require('node:test');
 var assert = require('node:assert');
 var request = require('supertest');
-var { MongoMemoryServer } = require('mongodb-memory-server');
-var mongoose = require('mongoose');
 
 function uniqueEmail() {
     return 'u' + Date.now() + '_' + Math.floor(Math.random() * 1e6) + '@example.com';
@@ -15,26 +13,22 @@ function basicAuth(email, password) {
 }
 
 describe('HTTP API', { timeout: 120000 }, function () {
-    var mongod;
     var app;
 
     before(async function () {
         process.env.NODE_ENV = 'test';
         process.env.RECEIPT_AGENT_MOCK = '1';
-        mongod = await MongoMemoryServer.create({
-            binary: { version: '5.0.29' },
-        });
-        process.env.MONGODB_URI = mongod.getUri();
-        global.__testActivationTokenByEmail = {};
-        global.__testResetTokenByEmail = {};
+        var dbmod = require('../lib/db');
+        await dbmod.initPool();
+        var migrate = require('../db/migrate');
+        await migrate(dbmod.pool);
+        await dbmod.pool.query('DELETE FROM users');
         app = require('../app');
     });
 
     after(async function () {
-        await mongoose.disconnect();
-        if (mongod) {
-            await mongod.stop();
-        }
+        var { pool } = require('../lib/db');
+        await pool.end();
     });
 
     describe('GET /', function () {

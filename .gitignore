@@ -1,5 +1,6 @@
 
 node_modules/
-config.js
+# Only the project root config (not test/fixtures/config.js)
+/config.js
 
 npm-debug.log
