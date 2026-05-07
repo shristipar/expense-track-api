@@ -12,6 +12,24 @@ function basicAuth(email, password) {
     return 'Basic ' + Buffer.from(email + ':' + password, 'utf8').toString('base64');
 }
 
+/** Register, activate, login; returns { email, jwt }. */
+async function registerActivateLogin(app) {
+    var email = uniqueEmail();
+    await request(app)
+        .post('/user/register')
+        .send({ name: 'Exp', email: email, password: 'password123' })
+        .expect(201);
+    var act = global.__testActivationTokenByEmail[email];
+    await request(app)
+        .get('/user/activate/' + encodeURIComponent(email) + '/' + act)
+        .expect(200);
+    var auth = await request(app)
+        .post('/user/authenticate')
+        .set('Authorization', basicAuth(email, 'password123'))
+        .expect(200);
+    return { email: email, jwt: auth.body.token };
+}
+
 describe('HTTP API', { timeout: 120000 }, function () {
     var app;
 
@@ -22,6 +40,7 @@ describe('HTTP API', { timeout: 120000 }, function () {
         await dbmod.initPool();
         var migrate = require('../db/migrate');
         await migrate(dbmod.pool);
+        await dbmod.pool.query('DELETE FROM expenses');
         await dbmod.pool.query('DELETE FROM users');
         app = require('../app');
     });
@@ -342,6 +361,98 @@ describe('HTTP API', { timeout: 120000 }, function () {
             assert.ok(res.body.expense);
             assert.ok(res.body.expense.merchant);
             assert.equal(typeof res.body.expense.total, 'number');
+        });
+    });
+
+    describe('/api/expenses CRUD', function () {
+        it('returns 401 without x-access-token', async function () {
+            var u = await registerActivateLogin(app);
+            await request(app)
+                .get('/api/expenses/' + encodeURIComponent(u.email))
+                .expect(401);
+        });
+
+        it('returns 401 when token email does not match path :id', async function () {
+            var u = await registerActivateLogin(app);
+            var other = await registerActivateLogin(app);
+            await request(app)
+                .get('/api/expenses/' + encodeURIComponent(other.email))
+                .set('x-access-token', u.jwt)
+                .expect(401);
+        });
+
+        it('creates, lists, gets, updates, deletes an expense', async function () {
+            var u = await registerActivateLogin(app);
+            var enc = encodeURIComponent(u.email);
+            var create = await request(app)
+                .post('/api/expenses/' + enc)
+                .set('x-access-token', u.jwt)
+                .send({
+                    merchant: 'Coffee Shop',
+                    total: 12.5,
+                    currency: 'usd',
+                    transactionDate: '2026-01-15',
+                    lineItems: [{ description: 'Latte', quantity: 1, unitPrice: 12.5, amount: 12.5 }],
+                    notes: 'morning',
+                })
+                .expect(201);
+            assert.ok(create.body.expense);
+            assert.equal(create.body.expense.merchant, 'Coffee Shop');
+            assert.equal(create.body.expense.total, 12.5);
+            assert.equal(create.body.expense.currency, 'USD');
+            var eid = create.body.expense.id;
+
+            var list = await request(app)
+                .get('/api/expenses/' + enc)
+                .set('x-access-token', u.jwt)
+                .expect(200);
+            assert.ok(Array.isArray(list.body.expenses));
+            assert.equal(list.body.expenses.length, 1);
+            assert.equal(list.body.expenses[0].id, eid);
+
+            var one = await request(app)
+                .get('/api/expenses/' + enc + '/' + eid)
+                .set('x-access-token', u.jwt)
+                .expect(200);
+            assert.equal(one.body.expense.merchant, 'Coffee Shop');
+            assert.ok(Array.isArray(one.body.expense.lineItems));
+            assert.equal(one.body.expense.lineItems.length, 1);
+
+            var upd = await request(app)
+                .put('/api/expenses/' + enc + '/' + eid)
+                .set('x-access-token', u.jwt)
+                .send({ merchant: 'Cafe', total: 15 })
+                .expect(200);
+            assert.equal(upd.body.expense.merchant, 'Cafe');
+            assert.equal(upd.body.expense.total, 15);
+
+            await request(app)
+                .delete('/api/expenses/' + enc + '/' + eid)
+                .set('x-access-token', u.jwt)
+                .expect(204);
+
+            await request(app)
+                .get('/api/expenses/' + enc + '/' + eid)
+                .set('x-access-token', u.jwt)
+                .expect(404);
+        });
+
+        it('returns 400 when merchant is missing on create', async function () {
+            var u = await registerActivateLogin(app);
+            var res = await request(app)
+                .post('/api/expenses/' + encodeURIComponent(u.email))
+                .set('x-access-token', u.jwt)
+                .send({ total: 10 })
+                .expect(400);
+            assert.ok(res.body.message);
+        });
+
+        it('returns 404 for unknown expense id', async function () {
+            var u = await registerActivateLogin(app);
+            await request(app)
+                .get('/api/expenses/' + encodeURIComponent(u.email) + '/999999')
+                .set('x-access-token', u.jwt)
+                .expect(404);
         });
     });
 });

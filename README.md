@@ -152,6 +152,18 @@ RECEIPT_AGENT_MOCK=1 npm start
 
 With `RECEIPT_AGENT_MOCK=1`, the handler returns the mock response **without** requiring an upload.
 
+## Stored expenses (CRUD)
+
+Expenses are saved per user in PostgreSQL. All routes require **`x-access-token`** whose JWT `message` must equal the URL **`:id`** (user email, URL-encoded).
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/api/expenses/:id` | List expenses for the user (newest first). |
+| `POST` | `/api/expenses/:id` | Create (`merchant` required; body fields match the expense model). Returns `201` + `{ expense }`. |
+| `GET` | `/api/expenses/:id/:expenseId` | Get one expense by numeric id. |
+| `PUT` | `/api/expenses/:id/:expenseId` | Full replace merge: omitted fields keep existing values where applicable. |
+| `DELETE` | `/api/expenses/:id/:expenseId` | Delete; returns `204` with no body. |
+
 ## Project layout
 
 | Path | Role |
@@ -159,11 +171,11 @@ With `RECEIPT_AGENT_MOCK=1`, the handler returns the mock response **without** r
 | `bin/www` | HTTP server entry; runs DB migrations then listens. |
 | `app.js` | Express app, middleware, routes. |
 | `db/` | SQL schema and migration runner. |
-| `routes/` | Route modules (`/`, `/user`, `/api/receipts`). |
+| `routes/` | Route modules (`/`, `/user`, `/api/receipts`, `/api/expenses`). |
 | `services/` | Receipt vision agent (`receipt-agent.js`). |
 | `lib/` | DB bootstrap (`db.js`: `pg` Pool or **PGlite**), `app-config.js`, `expense-model.js`. |
 | `controllers/` | Business logic, JWT helpers, mailer. |
-| `models/` | User persistence (`user.js` + `pg`). |
+| `models/` | User and expense persistence (`user.js`, `expense.js` + `pg`). |
 | `test/` | Integration tests and test-only config. |
 | `views/` | Jade templates. |
 | `public/` | Static assets; `.sass` compiled on the fly with `sass`. |
@@ -185,7 +197,7 @@ npm test
 
 On **push** or **pull request** to `master` or `main`, [GitHub Actions](.github/workflows/ci.yml) runs `npm ci` and **`npm test`** on Node.js 20 and 22 (PGlite in CI).
 
-`test/endpoints.test.js` uses **supertest** for `GET /`, **`/user/*`**, and **`POST /api/receipts/parse`** (receipt mock mode).
+`test/endpoints.test.js` uses **supertest** for `GET /`, **`/user/*`**, **`POST /api/receipts/parse`** (receipt mock mode), and **`/api/expenses`** CRUD.
 
 - **Config:** `lib/app-config.js` loads root `config.js` if present; otherwise, when `NODE_ENV=test`, it loads **`test/fixtures/config.js`** (no `databaseUrl`, so PGlite is used unless you set **`DATABASE_URL`** for an external DB).
 - **Email:** With `NODE_ENV=test`, the mailer skips SMTP and records activation and reset tokens on **`global.__testActivationTokenByEmail`** and **`global.__testResetTokenByEmail`**.
